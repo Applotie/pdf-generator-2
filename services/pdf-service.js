@@ -196,53 +196,106 @@ async function generatePricePDF(data) {
   try {
     console.log("Starting PDF generation...");
 
-    // -----------------------------------------------------
-    // Resolve Puppeteer executable path
-    // -----------------------------------------------------
-    const executablePath = await puppeteer.executablePath();
+    // =====================================================
+    // RESOLVE PUPPETEER EXECUTABLE
+    // =====================================================
+
+    const executablePath =
+      await puppeteer.executablePath();
 
     console.log("");
     console.log("========================================");
     console.log("Puppeteer");
     console.log("========================================");
-    console.log("Executable:", executablePath);
+    console.log(
+      "Executable:",
+      executablePath
+    );
 
-    if (!fs.existsSync(executablePath)) {
+    // =====================================================
+    // CHECK CHROME EXISTS
+    // =====================================================
+
+    const chromeExists =
+      fs.existsSync(executablePath);
+
+    console.log(
+      "Chrome exists:",
+      chromeExists
+    );
+
+    if (!chromeExists) {
       throw new Error(
         `Puppeteer Chrome executable was not found at:\n${executablePath}`
       );
     }
 
-    console.log("Chrome executable found.");
-    console.log("");
+    console.log(
+      "Chrome executable found."
+    );
 
-    browser = await puppeteer.launch({
-      headless: true,
+    // =====================================================
+    // LAUNCH CHROME
+    // =====================================================
 
-      executablePath,
+    console.log(
+      "Launching Chrome..."
+    );
 
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--disable-software-rasterizer",
-        "--disable-background-networking",
-        "--disable-background-timer-throttling",
-        "--disable-renderer-backgrounding",
-        "--disable-features=Translate,BackForwardCache",
-      ],
+    const launchStartedAt =
+      Date.now();
 
-      timeout: 60000,
-    });
+    browser =
+      await puppeteer.launch({
+        headless: true,
 
-    console.log("Chromium launched successfully.");
+        executablePath,
 
-    const page = await browser.newPage();
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
 
-    // -----------------------------------------------------
-    // A4 viewport
-    // -----------------------------------------------------
+          "--disable-dev-shm-usage",
+
+          "--disable-gpu",
+          "--disable-software-rasterizer",
+
+          "--disable-background-networking",
+          "--disable-background-timer-throttling",
+          "--disable-renderer-backgrounding",
+
+          "--disable-features=Translate,BackForwardCache",
+
+          "--single-process",
+        ],
+
+        timeout: 60000,
+      });
+
+    console.log(
+      `Chrome launched successfully in ${
+        Date.now() - launchStartedAt
+      }ms`
+    );
+
+    // =====================================================
+    // CREATE PAGE
+    // =====================================================
+
+    console.log(
+      "Creating new page..."
+    );
+
+    const page =
+      await browser.newPage();
+
+    console.log(
+      "New page created."
+    );
+
+    // =====================================================
+    // A4 VIEWPORT
+    // =====================================================
 
     await page.setViewport({
       width: 794,
@@ -250,9 +303,9 @@ async function generatePricePDF(data) {
       deviceScaleFactor: 1,
     });
 
-    // -----------------------------------------------------
-    // Browser settings
-    // -----------------------------------------------------
+    // =====================================================
+    // BROWSER SETTINGS
+    // =====================================================
 
     await page.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
@@ -261,12 +314,13 @@ async function generatePricePDF(data) {
     );
 
     await page.setExtraHTTPHeaders({
-      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Language":
+        "en-US,en;q=0.9",
     });
 
-    // -----------------------------------------------------
-    // Prepare table rows
-    // -----------------------------------------------------
+    // =====================================================
+    // PREPARE TABLE ROWS
+    // =====================================================
 
     const rows = data.priceList
       .map(
@@ -1025,7 +1079,9 @@ td:last-child {
     // LOAD HTML
     // =====================================================
 
-    console.log("Loading generated HTML...");
+    console.log(
+      "Loading generated HTML..."
+    );
 
     await page.setContent(html, {
       waitUntil: "domcontentloaded",
@@ -1055,9 +1111,8 @@ td:last-child {
     // =====================================================
 
     await page.evaluate(async () => {
-      const images = Array.from(
-        document.images
-      );
+      const images =
+        Array.from(document.images);
 
       await Promise.all(
         images.map((img) => {
@@ -1086,7 +1141,10 @@ td:last-child {
       "Images loaded successfully."
     );
 
-    // Small rendering delay
+    // =====================================================
+    // SMALL RENDERING DELAY
+    // =====================================================
+
     await new Promise((resolve) =>
       setTimeout(resolve, 500)
     );
@@ -1135,6 +1193,7 @@ td:last-child {
     if (browser) {
 
       try {
+
         await browser.close();
 
         console.log(
@@ -1152,4 +1211,6 @@ td:last-child {
   }
 }
 
-export { generatePricePDF };
+export {
+  generatePricePDF,
+};
