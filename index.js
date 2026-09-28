@@ -12,9 +12,17 @@ app.use(express.json());
 
 app.use("/api/pdf", pdfRoutes);
 
-app.get("/", (req, res) => {
-  res.json({
-    message: "PDF server is running"
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "PDF server is running",
+  });
+});
+
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "Route not found",
   });
 });
 

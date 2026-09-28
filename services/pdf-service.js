@@ -199,38 +199,43 @@ async function generatePricePDF(data) {
     // -----------------------------------------------------
     // Resolve Puppeteer executable path
     // -----------------------------------------------------
+const executablePath = puppeteer.executablePath();
 
-    const executablePath =
-      await puppeteer.executablePath();
+console.log(
+  "Puppeteer executable:",
+  executablePath
+);
 
-    console.log(
-      "Puppeteer executable:",
-      executablePath
-    );
+if (!fs.existsSync(executablePath)) {
+  throw new Error(
+    `Puppeteer Chrome executable was not found at:\n${executablePath}\n\n` +
+    `Puppeteer Chrome was not installed during deployment.`
+  );
+}
 
-    // -----------------------------------------------------
-    // Launch Chromium
-    // -----------------------------------------------------
+console.log(
+  "Puppeteer Chrome executable found."
+);
 
-    browser = await puppeteer.launch({
-      headless: true,
+browser = await puppeteer.launch({
+  headless: true,
 
-      executablePath,
+  executablePath,
 
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--disable-software-rasterizer",
-        "--disable-background-networking",
-        "--disable-background-timer-throttling",
-        "--disable-renderer-backgrounding",
-        "--disable-features=Translate,BackForwardCache",
-      ],
+  args: [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--disable-software-rasterizer",
+    "--disable-background-networking",
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-features=Translate,BackForwardCache",
+  ],
 
-      timeout: 60000,
-    });
+  timeout: 60000,
+});
 
     console.log("Chromium launched successfully.");
 
