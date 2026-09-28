@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from 'express';
 import cors from 'cors';
 
-import pdfRoutes from '../pdf-generator/routes/routers.js';
+import pdfRoutes from './routes/routers.js';
 
 const app = express();
 
