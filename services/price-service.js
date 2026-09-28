@@ -1,5 +1,4 @@
 import * as cheerio from "cheerio";
-import puppeteer from "puppeteer";
 
 const EXTERNAL_URL = process.env.EXTERNAL_PRICE_URL;
 

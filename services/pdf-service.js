@@ -1,4 +1,4 @@
-import puppeteer from "puppeteer";
+import PDFDocument from "pdfkit";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -86,1095 +86,1232 @@ const logoPath = path.join(
 );
 
 // =========================================================
-// LOAD FILES AS BASE64
+// A4
+//
+// Original browser design:
+// 794 x 1123 px
+//
+// PDF points:
+// A4 = 595.28 x 841.89 pt
+//
+// 1 px ≈ 0.75 pt
 // =========================================================
 
-const dubaiBoldBase64 = fs
-  .readFileSync(dubaiBoldPath)
-  .toString("base64");
+const PAGE_WIDTH = 595.28;
+const PAGE_HEIGHT = 841.89;
 
-const dubaiRegularBase64 = fs
-  .readFileSync(dubaiRegularPath)
-  .toString("base64");
+const PX = 0.75;
 
-const dubaiMediumBase64 = fs
-  .readFileSync(dubaiMediumPath)
-  .toString("base64");
-
-const calibriBase64 = fs
-  .readFileSync(calibriPath)
-  .toString("base64");
-
-const bridgeBase64 = fs
-  .readFileSync(bridgePath)
-  .toString("base64");
-
-const stampBase64 = fs
-  .readFileSync(stampPath)
-  .toString("base64");
-
-const logoBase64 = fs
-  .readFileSync(logoPath)
-  .toString("base64");
-
-const webBase64 = fs
-  .readFileSync(webPath)
-  .toString("base64");
-
-const telephoneBase64 = fs
-  .readFileSync(telephonePath)
-  .toString("base64");
-
-const tmtbarBase64 = fs
-  .readFileSync(tmtBarPath)
-  .toString("base64");
-
-const deliveryBase64 = fs
-  .readFileSync(homeDeliveryPath)
-  .toString("base64");
-
-const footerDetailsBase64 = fs
-  .readFileSync(footerDetailPath)
-  .toString("base64");
-
-const footerBgBase64 = fs
-  .readFileSync(bottomPath)
-  .toString("base64");
-
-const thicknessBase64 = fs
-  .readFileSync(thicknessPath)
-  .toString("base64");
-
-const priceBase64 = fs
-  .readFileSync(pricePath)
-  .toString("base64");
+// Convert original CSS px to PDF points
+const p = (value) => value * PX;
 
 // =========================================================
-// IMAGE SOURCES
+// COLORS
 // =========================================================
 
-const bridgeSrc =
-  `data:image/png;base64,${bridgeBase64}`;
+const BLUE = "#243a7c";
+const TABLE_BLUE = "#3156a3";
+const TEXT_BLUE = "#29457e";
+const FEATURE_BLUE = "#3e5a9d";
+const STATEMENT_BLUE = "#405da1";
+const RED = "#e63832";
+const WHITE = "#ffffff";
+const BLACK = "#111111";
 
-const stampSrc =
-  `data:image/png;base64,${stampBase64}`;
+// =========================================================
+// HELPERS
+// =========================================================
 
-const logoSrc =
-  `data:image/png;base64,${logoBase64}`;
+function assertFile(filePath, name) {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(
+      `${name} was not found at:\n${filePath}`
+    );
+  }
+}
 
-const webSrc =
-  `data:image/png;base64,${webBase64}`;
+function drawImageCover(
+  doc,
+  imagePath,
+  x,
+  y,
+  width,
+  height
+) {
+  /*
+   * PDFKit does not have CSS object-fit: cover.
+   *
+   * We use image dimensions from PDFKit internally and
+   * calculate the crop ourselves.
+   */
 
-const telephoneSrc =
-  `data:image/png;base64,${telephoneBase64}`;
+  const image = doc.openImage(imagePath);
 
-const tmtbarSrc =
-  `data:image/png;base64,${tmtbarBase64}`;
+  const imageWidth = image.width;
+  const imageHeight = image.height;
 
-const deliverySrc =
-  `data:image/png;base64,${deliveryBase64}`;
+  const containerRatio = width / height;
+  const imageRatio = imageWidth / imageHeight;
 
-const footerDetailsSrc =
-  `data:image/png;base64,${footerDetailsBase64}`;
+  let drawWidth;
+  let drawHeight;
+  let drawX;
+  let drawY;
 
-const footerBgSrc =
-  `data:image/png;base64,${footerBgBase64}`;
+  if (imageRatio > containerRatio) {
+    // Image is wider -> crop left/right
+    drawHeight = height;
+    drawWidth = height * imageRatio;
 
-const priceSrc =
-  `data:image/png;base64,${priceBase64}`;
+    drawX =
+      x - (drawWidth - width) / 2;
 
-const thicknessSrc =
-  `data:image/png;base64,${thicknessBase64}`;
+    drawY = y;
+  } else {
+    // Image is taller -> crop top/bottom
+    drawWidth = width;
+    drawHeight = width / imageRatio;
+
+    drawX = x;
+
+    drawY =
+      y - (drawHeight - height) / 2;
+  }
+
+  doc.save();
+
+  doc.rect(
+    x,
+    y,
+    width,
+    height
+  ).clip();
+
+  doc.image(
+    imagePath,
+    drawX,
+    drawY,
+    {
+      width: drawWidth,
+      height: drawHeight,
+    }
+  );
+
+  doc.restore();
+}
+
+function drawImageContain(
+  doc,
+  imagePath,
+  x,
+  y,
+  width,
+  height
+) {
+  const image = doc.openImage(imagePath);
+
+  const imageWidth = image.width;
+  const imageHeight = image.height;
+
+  const scale = Math.min(
+    width / imageWidth,
+    height / imageHeight
+  );
+
+  const drawWidth =
+    imageWidth * scale;
+
+  const drawHeight =
+    imageHeight * scale;
+
+  const drawX =
+    x + (width - drawWidth) / 2;
+
+  const drawY =
+    y + (height - drawHeight) / 2;
+
+  doc.image(
+    imagePath,
+    drawX,
+    drawY,
+    {
+      width: drawWidth,
+      height: drawHeight,
+    }
+  );
+}
+
+function drawCenteredText(
+  doc,
+  text,
+  x,
+  y,
+  width,
+  height,
+  options = {}
+) {
+  const {
+    font = "Helvetica",
+    size = 12,
+    color = BLACK,
+    align = "center",
+  } = options;
+
+  doc
+    .font(font)
+    .fontSize(size)
+    .fillColor(color);
+
+  const textHeight =
+    doc.heightOfString(text, {
+      width,
+      align,
+    });
+
+  const textY =
+    y + (height - textHeight) / 2;
+
+  doc.text(
+    text,
+    x,
+    textY,
+    {
+      width,
+      align,
+      lineBreak: false,
+    }
+  );
+}
 
 // =========================================================
 // GENERATE PDF
 // =========================================================
 
 async function generatePricePDF(data) {
-  let browser;
-
-  try {
-    console.log("Starting PDF generation...");
-
-    // =====================================================
-    // RESOLVE PUPPETEER EXECUTABLE
-    // =====================================================
-
-    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-
-    console.log("");
-    console.log("========================================");
-    console.log("Puppeteer");
-    console.log("========================================");
-    console.log(
-      "Executable:",
-      executablePath
-    );
-
-    // =====================================================
-    // CHECK CHROME EXISTS
-    // =====================================================
-
-    const chromeExists =
-      fs.existsSync(executablePath);
-
-    console.log(
-      "Chrome exists:",
-      chromeExists
-    );
-
-    if (!chromeExists) {
-      throw new Error(
-        `Puppeteer Chrome executable was not found at:\n${executablePath}`
-      );
-    }
-
-    console.log(
-      "Chrome executable found."
-    );
-
-    // =====================================================
-    // LAUNCH CHROME
-    // =====================================================
-
-    console.log(
-      "Launching Chrome..."
-    );
-
-    const launchStartedAt =
-      Date.now();
-
-    browser =
-      await puppeteer.launch({
-        headless: true,
-
-        executablePath,
-
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-
-          "--disable-dev-shm-usage",
-
-          "--disable-gpu",
-          "--disable-software-rasterizer",
-
-          "--disable-background-networking",
-          "--disable-background-timer-throttling",
-          "--disable-renderer-backgrounding",
-
-          "--disable-features=Translate,BackForwardCache",
-
-          "--single-process",
-        ],
-
-        timeout: 60000,
-      });
-
-    console.log(
-      `Chrome launched successfully in ${
-        Date.now() - launchStartedAt
-      }ms`
-    );
-
-    // =====================================================
-    // CREATE PAGE
-    // =====================================================
-
-    console.log(
-      "Creating new page..."
-    );
-
-    const page =
-      await browser.newPage();
-
-    console.log(
-      "New page created."
-    );
-
-    // =====================================================
-    // A4 VIEWPORT
-    // =====================================================
-
-    await page.setViewport({
-      width: 794,
-      height: 1123,
-      deviceScaleFactor: 1,
-    });
-
-    // =====================================================
-    // BROWSER SETTINGS
-    // =====================================================
-
-    await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-      "AppleWebKit/537.36 (KHTML, like Gecko) " +
-      "Chrome/151.0.0.0 Safari/537.36"
-    );
-
-    await page.setExtraHTTPHeaders({
-      "Accept-Language":
-        "en-US,en;q=0.9",
-    });
-
-    // =====================================================
-    // PREPARE TABLE ROWS
-    // =====================================================
-
-    const rows = data.priceList
-      .map(
-        (item) => `
-          <tr>
-            <td>${item.section} mm</td>
-            <td>₹ ${Number(item.price)}</td>
-          </tr>
-        `
-      )
-      .join("");
-
-    // =====================================================
-    // HTML
-    // =====================================================
-
-    const html = `
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-
-<meta charset="UTF-8">
-
-<style>
-
-* {
-  box-sizing: border-box;
-}
-
-@page {
-  size: A4;
-  margin: 0;
-}
-
-@font-face {
-  font-family: "Dubai";
-  src: url("data:font/ttf;base64,${dubaiBoldBase64}") format("truetype");
-  font-weight: 800;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: "Dubai-Re";
-  src: url("data:font/ttf;base64,${dubaiRegularBase64}") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: "Dubai-Me";
-  src: url("data:font/ttf;base64,${dubaiMediumBase64}") format("truetype");
-  font-weight: 500;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: "Calibri";
-  src: url("data:font/ttf;base64,${calibriBase64}") format("truetype");
-  font-weight: 700;
-  font-style: normal;
-}
-
-@font-face {
-  font-family: "Calibri-B";
-  src: url("data:font/ttf;base64,${calibriBase64}") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-}
-
-html,
-body {
-  width: 794px;
-  height: 1123px;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  font-family: Arial, Helvetica, sans-serif;
-  background: #243a7c;
-  color: #111;
-
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
-}
-
-.page {
-  position: relative;
-
-  width: 794px;
-  height: 1123px;
-
-  overflow: hidden;
-
-  background: #243a7c;
-}
-
-.bridge-background {
-  position: absolute;
-
-  left: 0;
-  top: 0;
-
-  width: 794px;
-  height: 1123px;
-
-  object-fit: cover;
-  object-position: center center;
-
-  z-index: 0;
-}
-
-.blue-overlay {
-  position: absolute;
-
-  top: 0;
-  right: 0;
-
-  width: 330px;
-  height: 230px;
-
-  background: #010510;
-
-  clip-path: polygon(
-    48% 0,
-    100% 0,
-    100% 100%,
-    0 100%
+  console.log(
+    "Starting PDF generation with PDFKit..."
   );
 
-  z-index: 1;
-
-  display: none;
-}
-
-.jsw-logo {
-  position: absolute;
-
-  top: 15px;
-  right: 20px;
-
-  width: 100px;
-  height: auto;
-
-  object-fit: contain;
-
-  z-index: 20;
-}
-
-.content {
-  position: absolute;
-
-  left: 50%;
-  top: 450px;
-
-  width: 650px;
-
-  transform: translate(-50%, -50%);
-
-  z-index: 5;
-}
-
-.title {
-  color: #fff;
-
-  font-family: "Dubai";
-
-  font-size: 37px;
-  line-height: 42px;
-
-  font-weight: 800;
-
-  letter-spacing: -0.9px;
-}
-
-.red-line {
-  width: 463px;
-  height: 5px;
-
-  background: #e63832;
-}
-
-.contact-row {
-  display: flex;
-
-  font-family: "Dubai";
-
-  align-items: center;
-
-  column-gap: 40px;
-
-  color: #fff;
-
-  font-size: 25px;
-
-  font-weight: 600;
-
-  letter-spacing: -0.5px;
-
-  margin-bottom: 20px;
-}
-
-.contact-item {
-  display: flex;
-
-  align-items: center;
-
-  white-space: nowrap;
-}
-
-.contact-icon {
-  width: 24px;
-  height: 24px;
-
-  object-fit: contain;
-
-  margin-right: 6px;
-
-  display: block;
-}
-
-.certification {
-  position: absolute;
-
-  top: -10px;
-  right: -15px;
-
-  width: 120px;
-  height: 120px;
-
-  z-index: 20;
-}
-
-.certification img {
-  width: 100%;
-  height: 100%;
-
-  object-fit: contain;
-}
-
-.state {
-  color: #fff;
-
-  font-family: "Dubai-Re";
-
-  font-size: 25px;
-
-  margin-bottom: 12px;
-}
-
-.price-box {
-  width: 100%;
-
-  font-family: "Dubai-Me";
-
-  background: #fff;
-}
-
-table {
-  width: 100%;
-
-  border-collapse: collapse;
-
-  table-layout: fixed;
-}
-
-th {
-  height: 55px;
-
-  background: #fff;
-
-  color: #29457e;
-
-  border: 1px solid #3156a3;
-
-  font-size: 24px;
-
-  font-weight: 600;
-
-  text-align: center;
-}
-
-td {
-  height: 55px;
-
-  background: #fff;
-
-  border: 1px solid #3156a3;
-
-  text-align: center;
-
-  font-size: 24px;
-
-  font-weight: 600;
-
-  padding: 4px 0;
-}
-
-th:first-child,
-td:first-child {
-  width: 40%;
-}
-
-th:last-child,
-td:last-child {
-  width: 60%;
-}
-
-.effective {
-  height: 44px;
-
-  display: flex;
-
-  align-items: center;
-
-  justify-content: center;
-
-  background: #fff;
-
-  border-left: 1px solid #3156a3;
-  border-right: 1px solid #3156a3;
-  border-bottom: 1px solid #3156a3;
-
-  font-size: 20px;
-
-  font-family: "Calibri-B";
-
-  font-weight: 600;
-}
-
-.statement {
-  height: 48px;
-
-  display: flex;
-
-  font-family: "Calibri-B";
-
-  font-weight: 600;
-
-  align-items: center;
-
-  justify-content: center;
-
-  background: #fff;
-
-  color: #405da1;
-
-  border-left: 1px solid #3156a3;
-  border-right: 1px solid #3156a3;
-
-  font-size: 17px;
-}
-
-.features {
-  height: 110px;
-
-  display: grid;
-
-  grid-template-columns:
-    1fr 1fr 1fr;
-
-  background: #fff;
-
-  border-left: 1px solid #3156a3;
-  border-right: 1px solid #3156a3;
-  border-bottom: 1px solid #3156a3;
-}
-
-.feature {
-  text-align: center;
-
-  color: #3e5a9d;
-
-  font-size: 9px;
-
-  font-weight: 700;
-
-  line-height: 13px;
-
-  padding: 10px 10px 8px;
-}
-
-.feature-icon {
-  height: 38px;
-
-  display: flex;
-
-  align-items: center;
-
-  justify-content: center;
-
-  padding-bottom: 3px;
-
-  margin-bottom: 5px;
-}
-
-.feature-icon img {
-  max-width: 42px;
-  max-height: 32px;
-
-  width: auto;
-  height: auto;
-
-  object-fit: contain;
-}
-
-.feature-text {
-  max-width: 165px;
-
-  font-family: "Calibri";
-
-  font-size: 13px;
-
-  margin: auto;
-}
-
-.rebar {
-  position: relative;
-
-  width: 100%;
-
-  height: 13px;
-
-  overflow: hidden;
-
-  background: #243a7c;
-}
-
-.rebar-image {
-  position: absolute;
-
-  left: 0;
-  top: 0;
-
-  width: 100%;
-  height: 13px;
-
-  object-fit: cover;
-
-  display: block;
-}
-
-.bottom-area {
-  position: absolute;
-
-  left: 0;
-  bottom: 0;
-
-  width: 100%;
-  height: 265px;
-
-  overflow: hidden;
-
-  background: transparent;
-
-  z-index: 8;
-}
-
-.footer-background {
-  position: absolute;
-
-  left: 0;
-  top: 0;
-
-  width: 100%;
-  height: 100%;
-
-  object-fit: cover;
-
-  object-position: center center;
-
-  display: block;
-
-  z-index: 0;
-}
-
-.footer-details-image {
-  position: absolute;
-
-  left: 50%;
-  bottom: 30px;
-
-  transform: translateX(-50%);
-
-  width: 680px;
-  height: 140px;
-
-  object-fit: contain;
-
-  object-position: center bottom;
-
-  display: block;
-
-  z-index: 5;
-}
-
-</style>
-
-</head>
-
-<body>
-
-<div class="page">
-
-  <!-- BRIDGE BACKGROUND -->
-
-  <img
-    class="bridge-background"
-    src="${bridgeSrc}"
-    alt=""
-  />
-
-  <!-- TOP RIGHT BLUE AREA -->
-
-  <div class="blue-overlay"></div>
-
-  <!-- JSW ONE LOGO -->
-
-  <img
-    class="jsw-logo"
-    src="${logoSrc}"
-    alt="JSW ONE"
-  />
-
-  <!-- MAIN CONTENT -->
-
-  <main class="content">
-
-    <!-- TITLE -->
-
-    <div class="title">
-      JSW One TMT Consumer Price
-    </div>
-
-    <!-- RED LINE -->
-
-    <div class="red-line"></div>
-
-    <!-- CONTACT -->
-
-    <div class="contact-row">
-
-      <div class="contact-item">
-
-        <img
-          class="contact-icon"
-          src="${webSrc}"
-          alt=""
-        />
-
-        www.jswonetmt.com
-
-      </div>
-
-      <div class="contact-item">
-
-        <img
-          class="contact-icon"
-          src="${telephoneSrc}"
-          alt=""
-        />
-
-        1800 1030 663
-
-      </div>
-
-    </div>
-
-    <!-- TMT STAMP -->
-
-    <div class="certification">
-
-      <img
-        src="${stampSrc}"
-        alt="10X TMT"
-      />
-
-    </div>
-
-    <!-- STATE -->
-
-    <div class="state">
-      For the state of
-      <span style="font-family: 'Dubai';">
-        Bihar
-      </span>
-    </div>
-
-    <!-- PRICE TABLE -->
-
-    <div class="price-box">
-
-      <table>
-
-        <thead>
-
-          <tr>
-
-            <th>
-              Section
-            </th>
-
-            <th>
-              Recommended Price (Fe 550)
-            </th>
-
-          </tr>
-
-        </thead>
-
-        <tbody>
-
-          ${rows}
-
-        </tbody>
-
-      </table>
-
-      <!-- EFFECTIVE DATE -->
-
-      <div class="effective">
-        With effective from:
-        ${data.effectiveDate}
-      </div>
-
-      <!-- ENGINEERING STATEMENT -->
-
-      <div class="statement">
-        100% engineered TMT that exceeds BIS standards
-      </div>
-
-      <!-- FEATURES -->
-
-      <div class="features">
-
-        <!-- FEATURE 1 -->
-
-        <div class="feature">
-
-          <div class="feature-icon">
-
-            <img
-              src="${priceSrc}"
-              alt=""
-            />
-
-          </div>
-
-          <div class="feature-text">
-
-            Prices are inclusive of all<br />
-
-            the taxes &amp; applicable on<br />
-
-            advance payment.
-
-          </div>
-
-        </div>
-
-        <!-- FEATURE 2 -->
-
-        <div class="feature">
-
-          <div class="feature-icon">
-
-            <img
-              src="${thicknessSrc}"
-              alt=""
-            />
-
-          </div>
-
-          <div class="feature-text">
-
-            Each piece is of 12m fixed<br />
-
-            length, all dimensions are<br />
-
-            subject to BIS tolerance.
-
-          </div>
-
-        </div>
-
-        <!-- FEATURE 3 -->
-
-        <div class="feature">
-
-          <div class="feature-icon">
-
-            <img
-              src="${deliverySrc}"
-              alt=""
-            />
-
-          </div>
-
-          <div class="feature-text">
-
-            Free home delivery for<br />
-
-            orders above 1MT within<br />
-
-            5km of municipal limits.
-
-          </div>
-
-        </div>
-
-      </div>
-
-      <!-- TMT BAR -->
-
-      <div class="rebar">
-
-        <img
-          class="rebar-image"
-          src="${tmtbarSrc}"
-          alt=""
-        />
-
-      </div>
-
-    </div>
-
-  </main>
-
-  <!-- FOOTER -->
-
-  <section class="bottom-area">
-
-    <img
-      class="footer-background"
-      src="${footerBgSrc}"
-      alt=""
-    />
-
-    <img
-      class="footer-details-image"
-      src="${footerDetailsSrc}"
-      alt="Kharakia Metals Private Limited"
-    />
-
-  </section>
-
-</div>
-
-</body>
-
-</html>
-`;
-
-    // =====================================================
-    // LOAD HTML
-    // =====================================================
-
-    console.log(
-      "Loading generated HTML..."
+  // =======================================================
+  // VALIDATE DATA
+  // =======================================================
+
+  if (!data) {
+    throw new Error(
+      "Price data is required."
     );
+  }
 
-    await page.setContent(html, {
-      waitUntil: "domcontentloaded",
-      timeout: 60000,
-    });
-
-    console.log(
-      "HTML loaded successfully."
+  if (
+    !Array.isArray(data.priceList)
+  ) {
+    throw new Error(
+      "priceList must be an array."
     );
+  }
 
-    // =====================================================
-    // WAIT FOR FONTS
-    // =====================================================
+  // =======================================================
+  // VALIDATE ASSETS
+  // =======================================================
 
-    await page.evaluate(async () => {
-      if (document.fonts) {
-        await document.fonts.ready;
-      }
-    });
+  assertFile(
+    dubaiBoldPath,
+    "Dubai-Bold.ttf"
+  );
 
-    console.log(
-      "Fonts loaded successfully."
-    );
+  assertFile(
+    dubaiRegularPath,
+    "Dubai-Regular.ttf"
+  );
 
-    // =====================================================
-    // WAIT FOR IMAGES
-    // =====================================================
+  assertFile(
+    dubaiMediumPath,
+    "Dubai-Medium.ttf"
+  );
 
-    await page.evaluate(async () => {
-      const images =
-        Array.from(document.images);
+  assertFile(
+    calibriPath,
+    "calibri.ttf"
+  );
 
-      await Promise.all(
-        images.map((img) => {
-          if (img.complete) {
-            return Promise.resolve();
-          }
+  assertFile(
+    bridgePath,
+    "bridge.png"
+  );
 
-          return new Promise((resolve) => {
-            img.addEventListener(
-              "load",
-              resolve,
-              { once: true }
-            );
+  assertFile(
+    stampPath,
+    "TMT-Stamp.png"
+  );
 
-            img.addEventListener(
-              "error",
-              resolve,
-              { once: true }
-            );
-          });
-        })
-      );
-    });
+  assertFile(
+    thicknessPath,
+    "12m.png"
+  );
 
-    console.log(
-      "Images loaded successfully."
-    );
+  assertFile(
+    bottomPath,
+    "bottom.png"
+  );
 
-    // =====================================================
-    // SMALL RENDERING DELAY
-    // =====================================================
+  assertFile(
+    footerDetailPath,
+    "footer-detail.png"
+  );
 
-    await new Promise((resolve) =>
-      setTimeout(resolve, 500)
-    );
+  assertFile(
+    homeDeliveryPath,
+    "home-delivery.png"
+  );
 
-    // =====================================================
-    // GENERATE PDF
-    // =====================================================
+  assertFile(
+    pricePath,
+    "price.png"
+  );
 
-    console.log(
-      "Creating PDF..."
-    );
+  assertFile(
+    telephonePath,
+    "telephone.png"
+  );
 
-    const pdf = await page.pdf({
-      format: "A4",
+  assertFile(
+    tmtBarPath,
+    "image.png"
+  );
 
-      printBackground: true,
+  assertFile(
+    webPath,
+    "web.png"
+  );
 
-      preferCSSPageSize: true,
+  assertFile(
+    logoPath,
+    "logo_JSW-one.png"
+  );
 
-      margin: {
-        top: "0",
-        right: "0",
-        bottom: "0",
-        left: "0",
+  console.log(
+    "All PDF assets found."
+  );
+
+  // =======================================================
+  // CREATE DOCUMENT
+  // =======================================================
+
+  const doc =
+    new PDFDocument({
+      size: "A4",
+
+      margin: 0,
+
+      autoFirstPage: true,
+
+      info: {
+        Title:
+          "JSW One TMT Consumer Price",
+        Author:
+          "JSW One TMT",
+        Subject:
+          "Recommended Consumer Price",
       },
-
-      timeout: 60000,
     });
 
+  // =======================================================
+  // RETURN PDF AS BUFFER
+  // =======================================================
+
+  const chunks = [];
+
+  doc.on(
+    "data",
+    (chunk) => {
+      chunks.push(chunk);
+    }
+  );
+
+  const pdfPromise =
+    new Promise(
+      (resolve, reject) => {
+        doc.on(
+          "end",
+          () => {
+            resolve(
+              Buffer.concat(chunks)
+            );
+          }
+        );
+
+        doc.on(
+          "error",
+          reject
+        );
+      }
+    );
+
+  try {
+    // =====================================================
+    // PAGE BACKGROUND
+    // =====================================================
+
     console.log(
-      "PDF generated successfully."
+      "Drawing page background..."
+    );
+
+    doc
+      .rect(
+        0,
+        0,
+        PAGE_WIDTH,
+        PAGE_HEIGHT
+      )
+      .fill(BLUE);
+
+    // =====================================================
+    // BRIDGE BACKGROUND
+    // =====================================================
+
+    drawImageCover(
+      doc,
+      bridgePath,
+      0,
+      0,
+      PAGE_WIDTH,
+      PAGE_HEIGHT
+    );
+
+    // =====================================================
+    // JSW LOGO
+    //
+    // Original:
+    // top: 15px
+    // right: 20px
+    // width: 100px
+    // =====================================================
+
+    const logoWidth =
+      p(100);
+
+    const logoX =
+      PAGE_WIDTH -
+      p(20) -
+      logoWidth;
+
+    const logoY =
+      p(15);
+
+    drawImageContain(
+      doc,
+      logoPath,
+      logoX,
+      logoY,
+      logoWidth,
+      p(70)
+    );
+
+    // =====================================================
+    // MAIN CONTENT
+    //
+    // Original content:
+    //
+    // left: 50%
+    // top: 450px
+    // width: 650px
+    //
+    // transform translate(-50%, -50%)
+    // =====================================================
+
+    const contentWidth =
+      p(650);
+
+    const contentX =
+      (PAGE_WIDTH -
+        contentWidth) /
+      2;
+
+    /*
+     * Original center point:
+     * top = 450px
+     *
+     * PDF equivalent:
+     */
+    const contentCenterY =
+      p(450);
+
+    // The original content starts approximately
+    // around 320px after translation.
+    let currentY =
+      contentCenterY -
+      p(110);
+
+    // =====================================================
+    // TITLE
+    // =====================================================
+
+    const title =
+      "JSW One TMT Consumer Price";
+
+    doc
+      .font(dubaiBoldPath)
+      .fontSize(p(37))
+      .fillColor(WHITE);
+
+    doc.text(
+      title,
+      contentX,
+      currentY,
+      {
+        width: contentWidth,
+        lineBreak: false,
+      }
+    );
+
+    currentY +=
+      p(48);
+
+    // =====================================================
+    // RED LINE
+    // =====================================================
+
+    doc
+      .rect(
+        contentX,
+        currentY,
+        p(463),
+        p(5)
+      )
+      .fill(RED);
+
+    currentY +=
+      p(15);
+
+    // =====================================================
+    // CONTACT ROW
+    // =====================================================
+
+    const contactHeight =
+      p(40);
+
+    const webIconWidth =
+      p(24);
+
+    const telephoneIconWidth =
+      p(24);
+
+    const contactFontSize =
+      p(25);
+
+    const firstContactX =
+      contentX;
+
+    const secondContactX =
+      contentX +
+      p(300);
+
+    // Website icon
+
+    drawImageContain(
+      doc,
+      webPath,
+      firstContactX,
+      currentY,
+      webIconWidth,
+      contactHeight
+    );
+
+    doc
+      .font(dubaiBoldPath)
+      .fontSize(contactFontSize)
+      .fillColor(WHITE);
+
+    doc.text(
+      "www.jswonetmt.com",
+      firstContactX +
+        p(30),
+      currentY +
+        p(3),
+      {
+        width: p(220),
+        lineBreak: false,
+      }
+    );
+
+    // Telephone icon
+
+    drawImageContain(
+      doc,
+      telephonePath,
+      secondContactX,
+      currentY,
+      telephoneIconWidth,
+      contactHeight
+    );
+
+    doc.text(
+      "1800 1030 663",
+      secondContactX +
+        p(30),
+      currentY +
+        p(3),
+      {
+        width: p(180),
+        lineBreak: false,
+      }
+    );
+
+    currentY +=
+      p(55);
+
+    // =====================================================
+    // TMT STAMP
+    //
+    // Original:
+    // top: -10px
+    // right: -15px
+    // width/height: 120px
+    // =====================================================
+
+    const stampSize =
+      p(120);
+
+    const stampX =
+      contentX +
+      contentWidth -
+      p(120);
+
+    const stampY =
+      currentY -
+      p(40);
+
+    drawImageContain(
+      doc,
+      stampPath,
+      stampX,
+      stampY,
+      stampSize,
+      stampSize
+    );
+
+    // =====================================================
+    // STATE
+    // =====================================================
+
+    doc
+      .font(dubaiRegularPath)
+      .fontSize(p(25))
+      .fillColor(WHITE);
+
+    doc.text(
+      "For the state of ",
+      contentX,
+      currentY,
+      {
+        continued: true,
+        lineBreak: false,
+      }
+    );
+
+    doc
+      .font(dubaiBoldPath)
+      .fontSize(p(25))
+      .fillColor(WHITE);
+
+    doc.text(
+      "Bihar",
+      {
+        continued: false,
+        lineBreak: false,
+      }
+    );
+
+    currentY +=
+      p(45);
+
+    // =====================================================
+    // PRICE TABLE
+    // =====================================================
+
+    const tableWidth =
+      contentWidth;
+
+    const firstColumnWidth =
+      tableWidth * 0.40;
+
+    const secondColumnWidth =
+      tableWidth * 0.60;
+
+    const headerHeight =
+      p(55);
+
+    const rowHeight =
+      p(55);
+
+    const borderWidth =
+      p(1);
+
+    // =====================================================
+    // TABLE HEADER
+    // =====================================================
+
+    doc
+      .rect(
+        contentX,
+        currentY,
+        firstColumnWidth,
+        headerHeight
+      )
+      .fill(WHITE);
+
+    doc
+      .rect(
+        contentX +
+          firstColumnWidth,
+        currentY,
+        secondColumnWidth,
+        headerHeight
+      )
+      .fill(WHITE);
+
+    // Borders
+
+    doc
+      .lineWidth(borderWidth)
+      .strokeColor(TABLE_BLUE);
+
+    doc
+      .rect(
+        contentX,
+        currentY,
+        tableWidth,
+        headerHeight
+      )
+      .stroke();
+
+    doc
+      .moveTo(
+        contentX +
+          firstColumnWidth,
+        currentY
+      )
+      .lineTo(
+        contentX +
+          firstColumnWidth,
+        currentY +
+          headerHeight
+      )
+      .stroke();
+
+    // Header text
+
+    drawCenteredText(
+      doc,
+      "Section",
+      contentX,
+      currentY,
+      firstColumnWidth,
+      headerHeight,
+      {
+        font: dubaiMediumPath,
+        size: p(24),
+        color: TEXT_BLUE,
+      }
+    );
+
+    drawCenteredText(
+      doc,
+      "Recommended Price (Fe 550)",
+      contentX +
+        firstColumnWidth,
+      currentY,
+      secondColumnWidth,
+      headerHeight,
+      {
+        font: dubaiMediumPath,
+        size: p(24),
+        color: TEXT_BLUE,
+      }
+    );
+
+    currentY +=
+      headerHeight;
+
+    // =====================================================
+    // TABLE ROWS
+    // =====================================================
+
+    for (
+      const item of data.priceList
+    ) {
+      const section =
+        `${item.section} mm`;
+
+      const price =
+        `₹ ${Number(item.price)}`;
+
+      // White cells
+
+      doc
+        .rect(
+          contentX,
+          currentY,
+          firstColumnWidth,
+          rowHeight
+        )
+        .fill(WHITE);
+
+      doc
+        .rect(
+          contentX +
+            firstColumnWidth,
+          currentY,
+          secondColumnWidth,
+          rowHeight
+        )
+        .fill(WHITE);
+
+      // Outer border
+
+      doc
+        .lineWidth(borderWidth)
+        .strokeColor(TABLE_BLUE);
+
+      doc
+        .rect(
+          contentX,
+          currentY,
+          tableWidth,
+          rowHeight
+        )
+        .stroke();
+
+      // Column border
+
+      doc
+        .moveTo(
+          contentX +
+            firstColumnWidth,
+          currentY
+        )
+        .lineTo(
+          contentX +
+            firstColumnWidth,
+          currentY +
+            rowHeight
+        )
+        .stroke();
+
+      // Section
+
+      drawCenteredText(
+        doc,
+        section,
+        contentX,
+        currentY,
+        firstColumnWidth,
+        rowHeight,
+        {
+          font: dubaiMediumPath,
+          size: p(24),
+          color: BLACK,
+        }
+      );
+
+      // Price
+
+      drawCenteredText(
+        doc,
+        price,
+        contentX +
+          firstColumnWidth,
+        currentY,
+        secondColumnWidth,
+        rowHeight,
+        {
+          font: dubaiMediumPath,
+          size: p(24),
+          color: BLACK,
+        }
+      );
+
+      currentY +=
+        rowHeight;
+    }
+
+    // =====================================================
+    // EFFECTIVE DATE
+    // =====================================================
+
+    const effectiveHeight =
+      p(44);
+
+    doc
+      .rect(
+        contentX,
+        currentY,
+        tableWidth,
+        effectiveHeight
+      )
+      .fill(WHITE);
+
+    doc
+      .lineWidth(borderWidth)
+      .strokeColor(TABLE_BLUE)
+      .rect(
+        contentX,
+        currentY,
+        tableWidth,
+        effectiveHeight
+      )
+      .stroke();
+
+    drawCenteredText(
+      doc,
+      `With effective from: ${data.effectiveDate}`,
+      contentX,
+      currentY,
+      tableWidth,
+      effectiveHeight,
+      {
+        font: calibriPath,
+        size: p(20),
+        color: BLACK,
+      }
+    );
+
+    currentY +=
+      effectiveHeight;
+
+    // =====================================================
+    // STATEMENT
+    // =====================================================
+
+    const statementHeight =
+      p(48);
+
+    doc
+      .rect(
+        contentX,
+        currentY,
+        tableWidth,
+        statementHeight
+      )
+      .fill(WHITE);
+
+    doc
+      .lineWidth(borderWidth)
+      .strokeColor(TABLE_BLUE);
+
+    doc
+      .moveTo(
+        contentX,
+        currentY
+      )
+      .lineTo(
+        contentX,
+        currentY +
+          statementHeight
+      )
+      .stroke();
+
+    doc
+      .moveTo(
+        contentX +
+          tableWidth,
+        currentY
+      )
+      .lineTo(
+        contentX +
+          tableWidth,
+        currentY +
+          statementHeight
+      )
+      .stroke();
+
+    drawCenteredText(
+      doc,
+      "100% engineered TMT that exceeds BIS standards",
+      contentX,
+      currentY,
+      tableWidth,
+      statementHeight,
+      {
+        font: calibriPath,
+        size: p(17),
+        color: STATEMENT_BLUE,
+      }
+    );
+
+    currentY +=
+      statementHeight;
+
+    // =====================================================
+    // FEATURES
+    // =====================================================
+
+    const featuresHeight =
+      p(110);
+
+    const featureWidth =
+      tableWidth / 3;
+
+    doc
+      .rect(
+        contentX,
+        currentY,
+        tableWidth,
+        featuresHeight
+      )
+      .fill(WHITE);
+
+    doc
+      .lineWidth(borderWidth)
+      .strokeColor(TABLE_BLUE)
+      .rect(
+        contentX,
+        currentY,
+        tableWidth,
+        featuresHeight
+      )
+      .stroke();
+
+    // Vertical dividers
+
+    doc
+      .moveTo(
+        contentX +
+          featureWidth,
+        currentY
+      )
+      .lineTo(
+        contentX +
+          featureWidth,
+        currentY +
+          featuresHeight
+      )
+      .stroke();
+
+    doc
+      .moveTo(
+        contentX +
+          featureWidth * 2,
+        currentY
+      )
+      .lineTo(
+        contentX +
+          featureWidth * 2,
+        currentY +
+          featuresHeight
+      )
+      .stroke();
+
+    // =====================================================
+    // FEATURE 1
+    // =====================================================
+
+    drawImageContain(
+      doc,
+      pricePath,
+      contentX +
+        p(15),
+      currentY +
+        p(8),
+      featureWidth -
+        p(30),
+      p(38)
+    );
+
+    drawCenteredText(
+      doc,
+      "Prices are inclusive of all\n" +
+        "the taxes & applicable on\n" +
+        "advance payment.",
+      contentX +
+        p(8),
+      currentY +
+        p(48),
+      featureWidth -
+        p(16),
+      p(55),
+      {
+        font: calibriPath,
+        size: p(13),
+        color: FEATURE_BLUE,
+      }
+    );
+
+    // =====================================================
+    // FEATURE 2
+    // =====================================================
+
+    drawImageContain(
+      doc,
+      thicknessPath,
+      contentX +
+        featureWidth +
+        p(15),
+      currentY +
+        p(8),
+      featureWidth -
+        p(30),
+      p(38)
+    );
+
+    drawCenteredText(
+      doc,
+      "Each piece is of 12m fixed\n" +
+        "length, all dimensions are\n" +
+        "subject to BIS tolerance.",
+      contentX +
+        featureWidth +
+        p(8),
+      currentY +
+        p(48),
+      featureWidth -
+        p(16),
+      p(55),
+      {
+        font: calibriPath,
+        size: p(13),
+        color: FEATURE_BLUE,
+      }
+    );
+
+    // =====================================================
+    // FEATURE 3
+    // =====================================================
+
+    drawImageContain(
+      doc,
+      homeDeliveryPath,
+      contentX +
+        featureWidth * 2 +
+        p(15),
+      currentY +
+        p(8),
+      featureWidth -
+        p(30),
+      p(38)
+    );
+
+    drawCenteredText(
+      doc,
+      "Free home delivery for\n" +
+        "orders above 1MT within\n" +
+        "5km of municipal limits.",
+      contentX +
+        featureWidth * 2 +
+        p(8),
+      currentY +
+        p(48),
+      featureWidth -
+        p(16),
+      p(55),
+      {
+        font: calibriPath,
+        size: p(13),
+        color: FEATURE_BLUE,
+      }
+    );
+
+    currentY +=
+      featuresHeight;
+
+    // =====================================================
+    // TMT BAR
+    // =====================================================
+
+    const rebarHeight =
+      p(13);
+
+    doc
+      .rect(
+        contentX,
+        currentY,
+        tableWidth,
+        rebarHeight
+      )
+      .fill(BLUE);
+
+    drawImageCover(
+      doc,
+      tmtBarPath,
+      contentX,
+      currentY,
+      tableWidth,
+      rebarHeight
+    );
+
+    // =====================================================
+    // FOOTER
+    // =====================================================
+
+    const bottomHeight =
+      p(265);
+
+    const bottomY =
+      PAGE_HEIGHT -
+      bottomHeight;
+
+    // Footer background
+
+    drawImageCover(
+      doc,
+      bottomPath,
+      0,
+      bottomY,
+      PAGE_WIDTH,
+      bottomHeight
+    );
+
+    // =====================================================
+    // FOOTER DETAILS
+    //
+    // Original:
+    //
+    // left: 50%
+    // bottom: 30px
+    // width: 680px
+    // height: 140px
+    // =====================================================
+
+    const footerDetailsWidth =
+      p(680);
+
+    const footerDetailsHeight =
+      p(140);
+
+    const footerDetailsX =
+      (PAGE_WIDTH -
+        footerDetailsWidth) /
+      2;
+
+    const footerDetailsY =
+      PAGE_HEIGHT -
+      p(30) -
+      footerDetailsHeight;
+
+    drawImageContain(
+      doc,
+      footerDetailPath,
+      footerDetailsX,
+      footerDetailsY,
+      footerDetailsWidth,
+      footerDetailsHeight
+    );
+
+    // =====================================================
+    // FINALIZE
+    // =====================================================
+
+    console.log(
+      "Finalizing PDF..."
+    );
+
+    doc.end();
+
+    const pdf =
+      await pdfPromise;
+
+    console.log(
+      `PDF generated successfully. Size: ${pdf.length} bytes`
     );
 
     return pdf;
@@ -1185,30 +1322,19 @@ td:last-child {
       error
     );
 
-    throw error;
-
-  } finally {
-
-    if (browser) {
-
-      try {
-
-        await browser.close();
-
-        console.log(
-          "Browser closed."
-        );
-
-      } catch (closeError) {
-
-        console.error(
-          "Error closing browser:",
-          closeError
-        );
-      }
+    try {
+      doc.end();
+    } catch {
+      // Ignore finalization errors
     }
+
+    throw error;
   }
 }
+
+// =========================================================
+// EXPORT
+// =========================================================
 
 export {
   generatePricePDF,
