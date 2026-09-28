@@ -199,42 +199,42 @@ async function generatePricePDF(data) {
     // -----------------------------------------------------
     // Resolve Puppeteer executable path
     // -----------------------------------------------------
-    const executablePath = puppeteer.executablePath();
+    const executablePath = await puppeteer.executablePath();
 
-console.log("");
-console.log("========================================");
-console.log("Puppeteer");
-console.log("========================================");
-console.log("Executable:", executablePath);
+    console.log("");
+    console.log("========================================");
+    console.log("Puppeteer");
+    console.log("========================================");
+    console.log("Executable:", executablePath);
 
-if (!fs.existsSync(executablePath)) {
-  throw new Error(
-    `Puppeteer Chrome executable was not found at:\n${executablePath}`
-  );
-}
+    if (!fs.existsSync(executablePath)) {
+      throw new Error(
+        `Puppeteer Chrome executable was not found at:\n${executablePath}`
+      );
+    }
 
-console.log("Chrome executable found.");
-console.log("");
+    console.log("Chrome executable found.");
+    console.log("");
 
-browser = await puppeteer.launch({
-  headless: true,
+    browser = await puppeteer.launch({
+      headless: true,
 
-  executablePath,
+      executablePath,
 
-  args: [
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-dev-shm-usage",
-    "--disable-gpu",
-    "--disable-software-rasterizer",
-    "--disable-background-networking",
-    "--disable-background-timer-throttling",
-    "--disable-renderer-backgrounding",
-    "--disable-features=Translate,BackForwardCache",
-  ],
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-software-rasterizer",
+        "--disable-background-networking",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-features=Translate,BackForwardCache",
+      ],
 
-  timeout: 60000,
-});
+      timeout: 60000,
+    });
 
     console.log("Chromium launched successfully.");
 
@@ -256,8 +256,8 @@ browser = await puppeteer.launch({
 
     await page.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
-        "AppleWebKit/537.36 (KHTML, like Gecko) " +
-        "Chrome/151.0.0.0 Safari/537.36"
+      "AppleWebKit/537.36 (KHTML, like Gecko) " +
+      "Chrome/151.0.0.0 Safari/537.36"
     );
 
     await page.setExtraHTTPHeaders({
