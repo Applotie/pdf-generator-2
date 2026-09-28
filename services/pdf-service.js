@@ -199,23 +199,22 @@ async function generatePricePDF(data) {
     // -----------------------------------------------------
     // Resolve Puppeteer executable path
     // -----------------------------------------------------
-const executablePath = puppeteer.executablePath();
+    const executablePath = puppeteer.executablePath();
 
-console.log(
-  "Puppeteer executable:",
-  executablePath
-);
+console.log("");
+console.log("========================================");
+console.log("Puppeteer");
+console.log("========================================");
+console.log("Executable:", executablePath);
 
 if (!fs.existsSync(executablePath)) {
   throw new Error(
-    `Puppeteer Chrome executable was not found at:\n${executablePath}\n\n` +
-    `Puppeteer Chrome was not installed during deployment.`
+    `Puppeteer Chrome executable was not found at:\n${executablePath}`
   );
 }
 
-console.log(
-  "Puppeteer Chrome executable found."
-);
+console.log("Chrome executable found.");
+console.log("");
 
 browser = await puppeteer.launch({
   headless: true,
