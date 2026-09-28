@@ -200,8 +200,7 @@ async function generatePricePDF(data) {
     // RESOLVE PUPPETEER EXECUTABLE
     // =====================================================
 
-    const executablePath =
-      await puppeteer.executablePath();
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
 
     console.log("");
     console.log("========================================");
