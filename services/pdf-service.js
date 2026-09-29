@@ -86,15 +86,16 @@ const logoPath = path.join(
 );
 
 // =========================================================
+// RUPEE SYMBOL
+// =========================================================
+
+const rupeeSymbolPath = path.join(
+  __dirname,
+  "../assets/Rupee-Symbol.png"
+);
+
+// =========================================================
 // A4
-//
-// Original browser design:
-// 794 x 1123 px
-//
-// PDF points:
-// A4 = 595.28 x 841.89 pt
-//
-// 1 px ≈ 0.75 pt
 // =========================================================
 
 const PAGE_WIDTH = 595.28;
@@ -102,7 +103,6 @@ const PAGE_HEIGHT = 841.89;
 
 const PX = 0.75;
 
-// Convert original CSS px to PDF points
 const p = (value) => value * PX;
 
 // =========================================================
@@ -138,13 +138,6 @@ function drawImageCover(
   width,
   height
 ) {
-  /*
-   * PDFKit does not have CSS object-fit: cover.
-   *
-   * We use image dimensions from PDFKit internally and
-   * calculate the crop ourselves.
-   */
-
   const image = doc.openImage(imagePath);
 
   const imageWidth = image.width;
@@ -159,7 +152,6 @@ function drawImageCover(
   let drawY;
 
   if (imageRatio > containerRatio) {
-    // Image is wider -> crop left/right
     drawHeight = height;
     drawWidth = height * imageRatio;
 
@@ -168,7 +160,6 @@ function drawImageCover(
 
     drawY = y;
   } else {
-    // Image is taller -> crop top/bottom
     drawWidth = width;
     drawHeight = width / imageRatio;
 
@@ -180,12 +171,14 @@ function drawImageCover(
 
   doc.save();
 
-  doc.rect(
-    x,
-    y,
-    width,
-    height
-  ).clip();
+  doc
+    .rect(
+      x,
+      y,
+      width,
+      height
+    )
+    .clip();
 
   doc.image(
     imagePath,
@@ -284,13 +277,139 @@ function drawCenteredText(
 }
 
 // =========================================================
+// CENTERED PRICE WITH RUPEE PNG
+// =========================================================
+
+function drawCenteredPrice(
+  doc,
+  amount,
+  x,
+  y,
+  width,
+  height,
+  options = {}
+) {
+  const {
+    font = dubaiBoldPath,
+    size = p(22),
+    color = BLACK,
+  } = options;
+
+  const priceText =
+    String(amount);
+
+  // -------------------------------------------------------
+  // PRICE TEXT
+  // -------------------------------------------------------
+
+  doc
+    .font(font)
+    .fontSize(size)
+    .fillColor(color);
+
+  const priceWidth =
+    doc.widthOfString(priceText);
+
+  const priceHeight =
+    doc.heightOfString(
+      priceText,
+      {
+        width: priceWidth,
+        lineBreak: false,
+      }
+    );
+
+  // -------------------------------------------------------
+  // RUPEE IMAGE SIZE
+  // -------------------------------------------------------
+
+  const rupeeImage =
+    doc.openImage(rupeeSymbolPath);
+
+  const rupeeImageWidth =
+    rupeeImage.width;
+
+  const rupeeImageHeight =
+    rupeeImage.height;
+
+  const rupeeHeight =
+    size * 0.72;
+
+  const rupeeWidth =
+    rupeeHeight *
+    (rupeeImageWidth / rupeeImageHeight);
+
+  // -------------------------------------------------------
+  // GAP BETWEEN RUPEE SYMBOL AND PRICE
+  // -------------------------------------------------------
+
+  const gap = p(5);
+
+  // -------------------------------------------------------
+  // TOTAL WIDTH
+  // -------------------------------------------------------
+
+  const totalWidth =
+    rupeeWidth +
+    gap +
+    priceWidth;
+
+  // -------------------------------------------------------
+  // CENTER COMPLETE PRICE UNIT
+  // -------------------------------------------------------
+
+  const startX =
+    x +
+    (width - totalWidth) / 2;
+
+  // -------------------------------------------------------
+  // VERTICAL CENTERING
+  // -------------------------------------------------------
+
+  const textY =
+    y +
+    (height - priceHeight) / 2;
+
+  const rupeeY =
+    textY +
+    (priceHeight - rupeeHeight) / 2;
+
+  // -------------------------------------------------------
+  // DRAW RUPEE PNG
+  // -------------------------------------------------------
+
+  doc.image(
+    rupeeSymbolPath,
+    startX,
+    rupeeY,
+    {
+      width: rupeeWidth,
+      height: rupeeHeight,
+    }
+  );
+
+  // -------------------------------------------------------
+  // DRAW BOLD PRICE
+  // -------------------------------------------------------
+
+  doc.text(
+    priceText,
+    startX +
+      rupeeWidth +
+      gap,
+    textY,
+    {
+      width: priceWidth,
+      lineBreak: false,
+    }
+  );
+}
+
+// =========================================================
 // GENERATE PDF
 // =========================================================
 
 async function generatePricePDF(data) {
-  console.log(
-    "Starting PDF generation with PDFKit..."
-  );
 
   // =======================================================
   // VALIDATE DATA
@@ -389,8 +508,9 @@ async function generatePricePDF(data) {
     "logo_JSW-one.png"
   );
 
-  console.log(
-    "All PDF assets found."
+  assertFile(
+    rupeeSymbolPath,
+    "Rupee-Symbol.png"
   );
 
   // =======================================================
@@ -400,9 +520,7 @@ async function generatePricePDF(data) {
   const doc =
     new PDFDocument({
       size: "A4",
-
       margin: 0,
-
       autoFirstPage: true,
 
       info: {
@@ -448,13 +566,10 @@ async function generatePricePDF(data) {
     );
 
   try {
+
     // =====================================================
     // PAGE BACKGROUND
     // =====================================================
-
-    console.log(
-      "Drawing page background..."
-    );
 
     doc
       .rect(
@@ -479,12 +594,7 @@ async function generatePricePDF(data) {
     );
 
     // =====================================================
-    // JSW LOGO
-    //
-    // Original:
-    // top: 15px
-    // right: 20px
-    // width: 100px
+    // JSW ONE LOGO
     // =====================================================
 
     const logoWidth =
@@ -509,14 +619,6 @@ async function generatePricePDF(data) {
 
     // =====================================================
     // MAIN CONTENT
-    //
-    // Original content:
-    //
-    // left: 50%
-    // top: 450px
-    // width: 650px
-    //
-    // transform translate(-50%, -50%)
     // =====================================================
 
     const contentWidth =
@@ -524,48 +626,109 @@ async function generatePricePDF(data) {
 
     const contentX =
       (PAGE_WIDTH -
-        contentWidth) /
-      2;
-
-    /*
-     * Original center point:
-     * top = 450px
-     *
-     * PDF equivalent:
-     */
-    const contentCenterY =
-      p(450);
-
-    // The original content starts approximately
-    // around 320px after translation.
-    let currentY =
-      contentCenterY -
-      p(110);
+        contentWidth) / 2;
 
     // =====================================================
-    // TITLE
+    // VERTICAL POSITION CONTROLS
+    // =====================================================
+
+    const topContentUp =
+      p(20);
+
+    const pricingContentUp =
+      p(30);
+
+    // =====================================================
+    // TMT STAMP
+    // =====================================================
+
+    const stampSize =
+      p(150);
+
+    const stampX =
+      contentX +
+      contentWidth -
+      stampSize;
+
+    const stampY =
+      p(103) -
+      topContentUp;
+
+    drawImageContain(
+      doc,
+      stampPath,
+      stampX,
+      stampY,
+      stampSize,
+      stampSize
+    );
+
+    // =====================================================
+    // TITLE + RED LINE
     // =====================================================
 
     const title =
       "JSW One TMT Consumer Price";
 
+    const titleFontSize =
+      p(37);
+
+    const titleSpacing =
+      p(4);
+
+    const redLineHeight =
+      p(5);
+
     doc
       .font(dubaiBoldPath)
-      .fontSize(p(37))
+      .fontSize(titleFontSize)
       .fillColor(WHITE);
+
+    const titleWidth =
+      doc.widthOfString(title);
+
+    const titleBounds =
+      doc.boundsOfString(
+        title,
+        contentX,
+        0,
+        {
+          width: titleWidth,
+          lineBreak: false,
+        }
+      );
+
+    // =====================================================
+    // RED LINE AT STAMP CENTER
+    // =====================================================
+
+    const stampCenterY =
+      stampY +
+      stampSize / 2;
+
+    const redLineY =
+      stampCenterY -
+      redLineHeight / 2;
+
+    // =====================================================
+    // TITLE
+    // =====================================================
+
+    const titleY =
+      redLineY -
+      titleSpacing -
+      titleBounds.y -
+      titleBounds.height;
 
     doc.text(
       title,
       contentX,
-      currentY,
+      titleY,
       {
-        width: contentWidth,
+        width: titleWidth,
         lineBreak: false,
       }
     );
-
-    currentY +=
-      p(48);
 
     // =====================================================
     // RED LINE
@@ -574,14 +737,11 @@ async function generatePricePDF(data) {
     doc
       .rect(
         contentX,
-        currentY,
-        p(463),
-        p(5)
+        redLineY,
+        titleWidth,
+        redLineHeight
       )
       .fill(RED);
-
-    currentY +=
-      p(15);
 
     // =====================================================
     // CONTACT ROW
@@ -602,93 +762,173 @@ async function generatePricePDF(data) {
     const firstContactX =
       contentX;
 
+    // =====================================================
+    // WEBSITE + TELEPHONE
+    // DUBAI REGULAR
+    // =====================================================
+
+    doc
+      .font(dubaiRegularPath)
+      .fontSize(contactFontSize)
+      .fillColor(WHITE);
+
+    const website =
+      "www.jswonetmt.com";
+
+    const telephone =
+      "1800 1030 663";
+
+    const websiteBounds =
+      doc.boundsOfString(
+        website,
+        firstContactX + p(30),
+        0,
+        {
+          width: p(220),
+          lineBreak: false,
+        }
+      );
+
+    const telephoneBounds =
+      doc.boundsOfString(
+        telephone,
+        0,
+        0,
+        {
+          width: p(180),
+          lineBreak: false,
+        }
+      );
+
+    // =====================================================
+    // TELEPHONE POSITION
+    // RIGHT EDGE MATCHES RED LINE
+    // =====================================================
+
+    const telephoneGroupWidth =
+      p(30) +
+      telephoneBounds.width;
+
     const secondContactX =
       contentX +
-      p(300);
+      titleWidth -
+      telephoneGroupWidth;
 
-    // Website icon
+    // =====================================================
+    // CONTACT VERTICAL POSITION
+    // =====================================================
+
+    const contactSpacing =
+      titleSpacing;
+
+    const contactTextY =
+      redLineY +
+      redLineHeight +
+      contactSpacing;
+
+    // =====================================================
+    // WEBSITE ICON
+    // =====================================================
 
     drawImageContain(
       doc,
       webPath,
       firstContactX,
-      currentY,
+      contactTextY + p(4),
       webIconWidth,
       contactHeight
     );
 
-    doc
-      .font(dubaiBoldPath)
-      .fontSize(contactFontSize)
-      .fillColor(WHITE);
+    // =====================================================
+    // WEBSITE TEXT
+    // =====================================================
 
     doc.text(
-      "www.jswonetmt.com",
-      firstContactX +
-        p(30),
-      currentY +
-        p(3),
+      website,
+      firstContactX + p(30),
+      contactTextY -
+        websiteBounds.y,
       {
         width: p(220),
         lineBreak: false,
       }
     );
 
-    // Telephone icon
+    // =====================================================
+    // TELEPHONE ICON
+    // =====================================================
 
     drawImageContain(
       doc,
       telephonePath,
       secondContactX,
-      currentY,
+      contactTextY,
       telephoneIconWidth,
       contactHeight
     );
 
+    // =====================================================
+    // TELEPHONE TEXT
+    // =====================================================
+
     doc.text(
-      "1800 1030 663",
-      secondContactX +
-        p(30),
-      currentY +
-        p(3),
+      telephone,
+      secondContactX + p(30),
+      contactTextY -
+        telephoneBounds.y,
       {
         width: p(180),
         lineBreak: false,
       }
     );
 
-    currentY +=
-      p(55);
-
     // =====================================================
-    // TMT STAMP
-    //
-    // Original:
-    // top: -10px
-    // right: -15px
-    // width/height: 120px
+    // PRICE TABLE
     // =====================================================
 
-    const stampSize =
-      p(120);
+    const tableWidth =
+      contentWidth;
 
-    const stampX =
-      contentX +
-      contentWidth -
-      p(120);
+    const firstColumnWidth =
+      tableWidth * 0.40;
 
-    const stampY =
-      currentY -
-      p(40);
+    const secondColumnWidth =
+      tableWidth * 0.60;
 
-    drawImageContain(
-      doc,
-      stampPath,
-      stampX,
-      stampY,
-      stampSize,
-      stampSize
-    );
+    const headerHeight =
+      p(52);
+
+    const rowHeight =
+      p(52);
+
+    const borderWidth =
+      p(1);
+
+    // =====================================================
+    // PRICING SECTION
+    // =====================================================
+
+    const stateHeight =
+      p(30);
+
+    const pricingSectionHeight =
+      stateHeight +
+      p(8) +
+      headerHeight +
+      rowHeight *
+        data.priceList.length +
+      p(42) +
+      p(45) +
+      p(105);
+
+    const pricingSectionTop =
+      (PAGE_HEIGHT -
+        pricingSectionHeight) /
+        2 -
+      pricingContentUp;
+
+    let currentY =
+      pricingSectionTop;
 
     // =====================================================
     // STATE
@@ -723,29 +963,7 @@ async function generatePricePDF(data) {
     );
 
     currentY +=
-      p(45);
-
-    // =====================================================
-    // PRICE TABLE
-    // =====================================================
-
-    const tableWidth =
-      contentWidth;
-
-    const firstColumnWidth =
-      tableWidth * 0.40;
-
-    const secondColumnWidth =
-      tableWidth * 0.60;
-
-    const headerHeight =
-      p(55);
-
-    const rowHeight =
-      p(55);
-
-    const borderWidth =
-      p(1);
+      stateHeight + p(8);
 
     // =====================================================
     // TABLE HEADER
@@ -769,8 +987,6 @@ async function generatePricePDF(data) {
         headerHeight
       )
       .fill(WHITE);
-
-    // Borders
 
     doc
       .lineWidth(borderWidth)
@@ -799,7 +1015,9 @@ async function generatePricePDF(data) {
       )
       .stroke();
 
-    // Header text
+    // =====================================================
+    // SECTION HEADER - BOLD
+    // =====================================================
 
     drawCenteredText(
       doc,
@@ -809,11 +1027,15 @@ async function generatePricePDF(data) {
       firstColumnWidth,
       headerHeight,
       {
-        font: dubaiMediumPath,
-        size: p(24),
+        font: dubaiBoldPath,
+        size: p(22),
         color: TEXT_BLUE,
       }
     );
+
+    // =====================================================
+    // PRICE HEADER - BOLD
+    // =====================================================
 
     drawCenteredText(
       doc,
@@ -824,8 +1046,8 @@ async function generatePricePDF(data) {
       secondColumnWidth,
       headerHeight,
       {
-        font: dubaiMediumPath,
-        size: p(24),
+        font: dubaiBoldPath,
+        size: p(22),
         color: TEXT_BLUE,
       }
     );
@@ -844,9 +1066,11 @@ async function generatePricePDF(data) {
         `${item.section} mm`;
 
       const price =
-        `₹ ${Number(item.price)}`;
+        Number(item.price);
 
-      // White cells
+      // ===================================================
+      // LEFT CELL
+      // ===================================================
 
       doc
         .rect(
@@ -856,6 +1080,10 @@ async function generatePricePDF(data) {
           rowHeight
         )
         .fill(WHITE);
+
+      // ===================================================
+      // RIGHT CELL
+      // ===================================================
 
       doc
         .rect(
@@ -867,7 +1095,9 @@ async function generatePricePDF(data) {
         )
         .fill(WHITE);
 
-      // Outer border
+      // ===================================================
+      // BORDER
+      // ===================================================
 
       doc
         .lineWidth(borderWidth)
@@ -882,7 +1112,9 @@ async function generatePricePDF(data) {
         )
         .stroke();
 
-      // Column border
+      // ===================================================
+      // COLUMN DIVIDER
+      // ===================================================
 
       doc
         .moveTo(
@@ -898,7 +1130,9 @@ async function generatePricePDF(data) {
         )
         .stroke();
 
-      // Section
+      // ===================================================
+      // SECTION VALUE - BOLD
+      // ===================================================
 
       drawCenteredText(
         doc,
@@ -908,15 +1142,17 @@ async function generatePricePDF(data) {
         firstColumnWidth,
         rowHeight,
         {
-          font: dubaiMediumPath,
-          size: p(24),
+          font: dubaiBoldPath,
+          size: p(22),
           color: BLACK,
         }
       );
 
-      // Price
+      // ===================================================
+      // PRICE - BOLD + RUPEE PNG
+      // ===================================================
 
-      drawCenteredText(
+      drawCenteredPrice(
         doc,
         price,
         contentX +
@@ -925,8 +1161,8 @@ async function generatePricePDF(data) {
         secondColumnWidth,
         rowHeight,
         {
-          font: dubaiMediumPath,
-          size: p(24),
+          font: dubaiBoldPath,
+          size: p(22),
           color: BLACK,
         }
       );
@@ -940,7 +1176,7 @@ async function generatePricePDF(data) {
     // =====================================================
 
     const effectiveHeight =
-      p(44);
+      p(42);
 
     doc
       .rect(
@@ -971,7 +1207,7 @@ async function generatePricePDF(data) {
       effectiveHeight,
       {
         font: calibriPath,
-        size: p(20),
+        size: p(18),
         color: BLACK,
       }
     );
@@ -984,7 +1220,7 @@ async function generatePricePDF(data) {
     // =====================================================
 
     const statementHeight =
-      p(48);
+      p(45);
 
     doc
       .rect(
@@ -1034,7 +1270,7 @@ async function generatePricePDF(data) {
       statementHeight,
       {
         font: calibriPath,
-        size: p(17),
+        size: p(16),
         color: STATEMENT_BLUE,
       }
     );
@@ -1047,7 +1283,7 @@ async function generatePricePDF(data) {
     // =====================================================
 
     const featuresHeight =
-      p(110);
+      p(105);
 
     const featureWidth =
       tableWidth / 3;
@@ -1072,7 +1308,9 @@ async function generatePricePDF(data) {
       )
       .stroke();
 
-    // Vertical dividers
+    // =====================================================
+    // FEATURE DIVIDERS
+    // =====================================================
 
     doc
       .moveTo(
@@ -1112,10 +1350,10 @@ async function generatePricePDF(data) {
       contentX +
         p(15),
       currentY +
-        p(8),
+        p(5),
       featureWidth -
         p(30),
-      p(38)
+      p(30)
     );
 
     drawCenteredText(
@@ -1126,13 +1364,13 @@ async function generatePricePDF(data) {
       contentX +
         p(8),
       currentY +
-        p(48),
+        p(38),
       featureWidth -
         p(16),
-      p(55),
+      p(48),
       {
         font: calibriPath,
-        size: p(13),
+        size: p(12),
         color: FEATURE_BLUE,
       }
     );
@@ -1148,10 +1386,10 @@ async function generatePricePDF(data) {
         featureWidth +
         p(15),
       currentY +
-        p(8),
+        p(5),
       featureWidth -
         p(30),
-      p(38)
+      p(30)
     );
 
     drawCenteredText(
@@ -1163,13 +1401,13 @@ async function generatePricePDF(data) {
         featureWidth +
         p(8),
       currentY +
-        p(48),
+        p(38),
       featureWidth -
         p(16),
-      p(55),
+      p(48),
       {
         font: calibriPath,
-        size: p(13),
+        size: p(12),
         color: FEATURE_BLUE,
       }
     );
@@ -1185,10 +1423,10 @@ async function generatePricePDF(data) {
         featureWidth * 2 +
         p(15),
       currentY +
-        p(8),
+        p(5),
       featureWidth -
         p(30),
-      p(38)
+      p(30)
     );
 
     drawCenteredText(
@@ -1200,13 +1438,13 @@ async function generatePricePDF(data) {
         featureWidth * 2 +
         p(8),
       currentY +
-        p(48),
+        p(38),
       featureWidth -
         p(16),
-      p(55),
+      p(48),
       {
         font: calibriPath,
-        size: p(13),
+        size: p(12),
         color: FEATURE_BLUE,
       }
     );
@@ -1215,11 +1453,34 @@ async function generatePricePDF(data) {
       featuresHeight;
 
     // =====================================================
-    // TMT BAR
+    // TMT BAR / image.png
     // =====================================================
 
     const rebarHeight =
-      p(13);
+      p(10);
+
+    const bottomHeight =
+      p(265);
+
+    const bottomY =
+      PAGE_HEIGHT -
+      bottomHeight;
+
+    const footerGap =
+      p(5);
+
+    const maximumRebarY =
+      bottomY -
+      footerGap -
+      rebarHeight;
+
+    if (
+      currentY >
+      maximumRebarY
+    ) {
+      currentY =
+        maximumRebarY;
+    }
 
     doc
       .rect(
@@ -1243,15 +1504,6 @@ async function generatePricePDF(data) {
     // FOOTER
     // =====================================================
 
-    const bottomHeight =
-      p(265);
-
-    const bottomY =
-      PAGE_HEIGHT -
-      bottomHeight;
-
-    // Footer background
-
     drawImageCover(
       doc,
       bottomPath,
@@ -1263,13 +1515,6 @@ async function generatePricePDF(data) {
 
     // =====================================================
     // FOOTER DETAILS
-    //
-    // Original:
-    //
-    // left: 50%
-    // bottom: 30px
-    // width: 680px
-    // height: 140px
     // =====================================================
 
     const footerDetailsWidth =
@@ -1280,8 +1525,7 @@ async function generatePricePDF(data) {
 
     const footerDetailsX =
       (PAGE_WIDTH -
-        footerDetailsWidth) /
-      2;
+        footerDetailsWidth) / 2;
 
     const footerDetailsY =
       PAGE_HEIGHT -
@@ -1301,26 +1545,14 @@ async function generatePricePDF(data) {
     // FINALIZE
     // =====================================================
 
-    console.log(
-      "Finalizing PDF..."
-    );
-
     doc.end();
 
     const pdf =
       await pdfPromise;
 
-    console.log(
-      `PDF generated successfully. Size: ${pdf.length} bytes`
-    );
-
     return pdf;
 
   } catch (error) {
-    console.error(
-      "PDF generation failed:",
-      error
-    );
 
     try {
       doc.end();
